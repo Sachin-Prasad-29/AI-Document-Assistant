@@ -35,6 +35,12 @@ class Document(Base):
     # Supabase user UUID of the person who uploaded this document
     uploaded_by: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
 
+    # Role of the uploader at upload time ("admin" or "user").
+    # Admin-uploaded documents are readable by everyone in chat.
+    uploaded_by_role: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="user", default="user"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

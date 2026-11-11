@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_role
+from app.auth import get_current_user
 from app.config import settings
 from app.db import crud
 from app.db.database import get_db
@@ -54,6 +54,7 @@ def create_document(
         filename=None,
         file_path=None,
         uploaded_by=user["id"],
+        uploaded_by_role=user["role"],
     )
     ingest_document(db, doc.id)
     return doc
@@ -91,6 +92,7 @@ def upload_document(
         file_path=str(file_path),
         content="",
         uploaded_by=user["id"],
+        uploaded_by_role=user["role"],
     )
     ingest_document(db, doc.id)
     return doc
@@ -102,11 +104,9 @@ def list_documents(
     user: dict = Depends(get_current_user),
 ):
     """
-    Admins see all documents.
-    Regular users see only their own documents.
+    Every user (including admins) sees only their own documents.
+    Admin-uploaded documents are visible in chat, not in this list.
     """
-    if user["role"] == "admin":
-        return crud.list_documents(db)
     return crud.list_documents_by_user(db, user["id"])
 
 
@@ -116,11 +116,11 @@ def get_document(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Fetch a single document. Users can only fetch their own; admins can fetch any."""
+    """Fetch a single document. Only the uploader can fetch it."""
     doc = crud.get_document(db, id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    if user["role"] != "admin" and doc.uploaded_by != user["id"]:
+    if doc.uploaded_by != user["id"]:
         raise HTTPException(
             status_code=403, detail="You do not have access to this document"
         )
@@ -131,16 +131,19 @@ def get_document(
 def delete_document(
     id: str,
     db: Session = Depends(get_db),
-    # Only admins may call DELETE via the REST API
-    user: dict = Depends(require_role("admin")),
+    user: dict = Depends(get_current_user),
 ):
-    """Permanently delete a document. Admin-only."""
+    """Permanently delete a document. Only the uploader may delete it."""
     doc = crud.get_document(db, id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
+    if doc.uploaded_by != user["id"]:
+        raise HTTPException(
+            status_code=403, detail="You do not have permission to delete this document"
+        )
 
     logger.info(
-        "Admin id=%s deleting document id=%s title=%r", user["id"], id, doc.title
+        "User id=%s deleting own document id=%s title=%r", user["id"], id, doc.title
     )
     documents_service.delete_document(db, doc)
     return Response(status_code=204)
@@ -153,11 +156,11 @@ def summarize(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Summarize a document. Users can only summarize their own docs; admins any."""
+    """Summarize a document. Only the uploader can summarize it."""
     doc = crud.get_document(db, id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    if user["role"] != "admin" and doc.uploaded_by != user["id"]:
+    if doc.uploaded_by != user["id"]:
         raise HTTPException(
             status_code=403, detail="You do not have access to this document"
         )

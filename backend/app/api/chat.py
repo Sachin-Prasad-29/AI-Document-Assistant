@@ -6,6 +6,8 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import Command
 
 from app.auth import get_current_user
+from app.db import crud
+from app.db.database import SessionLocal
 from app.schemas import ChatRequest, ChatResponse, ResumeRequest
 
 logger = logging.getLogger(__name__)
@@ -137,19 +139,27 @@ def resume(
             status_code=409, detail="No pending approval for this thread."
         )
 
-    # Check pending interrupt for admin actions
+    # Check pending interrupt: only the uploader may approve deleting a document
     state = agent.get_state(config)
     if state.interrupts:
         interrupt_val = state.interrupts[0].value
         if (
             isinstance(interrupt_val, dict)
             and interrupt_val.get("action") == "delete_document"
-            and user["role"] != "admin"
         ):
-            raise HTTPException(
-                status_code=403,
-                detail="Forbidden: Only admin users can approve document deletion.",
-            )
+            document_id = interrupt_val.get("document_id")
+            doc = None
+            if document_id:
+                db = SessionLocal()
+                try:
+                    doc = crud.get_document(db, document_id)
+                finally:
+                    db.close()
+            if doc is not None and doc.uploaded_by != user["id"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Forbidden: you can only approve deletion of your own documents.",
+                )
 
     try:
         # Same thread_id; the tool re-runs and interrupt() returns this value

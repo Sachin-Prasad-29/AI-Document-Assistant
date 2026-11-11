@@ -46,14 +46,31 @@ def count() -> int:
 
 
 def search(
-    query: str, k: int | None = None, document_id: str | None = None
+    query: str,
+    k: int | None = None,
+    document_id: str | None = None,
+    document_ids: list[str] | None = None,
 ) -> list[dict]:
     # Embeds the query and returns the k closest chunks.
-    # If document_id is given, only chunks from that document are considered.
+    # document_id restricts the search to one document;
+    # document_ids restricts it to a set of documents (used to keep chat
+    # answers inside the caller's own documents plus admin-uploaded ones).
     k = k or settings.retrieval_k
-    metadata_filter = {"document_id": document_id} if document_id else None
-    logger.debug("Vector search query=%r k=%d document_id=%s", query, k, document_id)
-    logger.debug("Vector search query=%r k=%d document_id=%s", query, k, document_id)
+    if document_id:
+        metadata_filter = {"document_id": document_id}
+    elif document_ids is not None:
+        if not document_ids:
+            return []  # nothing this user may read; skip the Chroma call
+        metadata_filter = {"document_id": {"$in": list(document_ids)}}
+    else:
+        metadata_filter = None
+    logger.debug(
+        "Vector search query=%r k=%d document_id=%s document_ids=%s",
+        query,
+        k,
+        document_id,
+        document_ids,
+    )
 
     results = get_vector_store().similarity_search_with_score(
         query, k=k, filter=metadata_filter

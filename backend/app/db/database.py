@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
@@ -31,3 +31,18 @@ def get_db():
 def init_db():
     # Creates any missing tables. Call after models are imported so they're registered on Base.
     Base.metadata.create_all(bind=engine)
+    _migrate_documents_uploaded_by_role()
+
+
+def _migrate_documents_uploaded_by_role():
+    # create_all never alters existing tables, so add the column by hand on old databases.
+    columns = {col["name"] for col in inspect(engine).get_columns("documents")}
+    if "uploaded_by_role" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "ALTER TABLE documents "
+                "ADD COLUMN uploaded_by_role TEXT NOT NULL DEFAULT 'user'"
+            )
+        )

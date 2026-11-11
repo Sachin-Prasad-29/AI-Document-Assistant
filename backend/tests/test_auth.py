@@ -49,11 +49,16 @@ def test_user_can_only_list_own_documents(user_client, other_user_client, client
     assert doc2["id"] in ids2
     assert doc1["id"] not in ids2
 
-    # Admin (client) lists documents -> sees both
+    # Admin (client) lists documents -> sees only their own (none here)
     admin_list = client.get("/documents").json()
-    admin_ids = [d["id"] for d in admin_list]
-    assert doc1["id"] in admin_ids
-    assert doc2["id"] in admin_ids
+    assert admin_list == []
+
+    # Admin creates a document -> admin list shows only it
+    admin_doc = client.post(
+        "/documents", json={"title": "Admin Doc", "content": "Admin content"}
+    ).json()
+    admin_ids = [d["id"] for d in client.get("/documents").json()]
+    assert admin_ids == [admin_doc["id"]]
 
 
 def test_user_cannot_access_other_users_document(user_client, other_user_client):
@@ -70,30 +75,61 @@ def test_user_cannot_access_other_users_document(user_client, other_user_client)
     assert res.status_code == 403
 
 
-def test_regular_user_cannot_delete_document(user_client, client):
+def test_only_uploader_can_delete_document(user_client, other_user_client, client):
     # User 1 creates a document
     doc = user_client.post(
         "/documents", json={"title": "User Doc", "content": "To be deleted"}
     ).json()
 
-    # Regular user attempts DELETE -> 403 Forbidden
-    res = user_client.delete(f"/documents/{doc['id']}")
+    # Another regular user attempts DELETE -> 403 Forbidden
+    res = other_user_client.delete(f"/documents/{doc['id']}")
     assert res.status_code == 403
 
-    # Admin attempts DELETE -> 204 No Content
+    # Admin (who did not upload it) attempts DELETE -> 403 Forbidden
     res = client.delete(f"/documents/{doc['id']}")
+    assert res.status_code == 403
+
+    # The uploader deletes their own document -> 204 No Content
+    res = user_client.delete(f"/documents/{doc['id']}")
     assert res.status_code == 204
 
 
-def test_agent_delete_tool_role_check():
-    from app.agent.tools import delete_document
+def test_agent_delete_tool_owner_check(tmp_path, monkeypatch):
+    import app.agent.tools as tools
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
-    # 1. Non-admin user role in config -> denied immediately
-    res_non_admin = delete_document.invoke(
-        {"document_id": "any-doc-id"},
-        config={"configurable": {"user_id": "u1", "user_role": "user"}},
+    from app.db import crud
+    from app.db.database import Base
+
+    # Point the agent tools at an isolated database
+    engine = create_engine(
+        f"sqlite:///{tmp_path}/tools.db", connect_args={"check_same_thread": False}
     )
-    assert (
-        "Permission denied: only admin users are allowed to delete documents."
-        in res_non_admin
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine, autoflush=False)
+    monkeypatch.setattr(tools, "SessionLocal", TestSession)
+
+    with TestSession() as db:
+        doc = crud.create_document(
+            db,
+            title="Admin Doc",
+            content="x",
+            uploaded_by="admin-1",
+            uploaded_by_role="admin",
+        )
+
+    # Non-owner (regular user) attempt -> denied before any approval step
+    res_user = tools.delete_document.invoke(
+        {"document_id": doc.id},
+        config={"configurable": {"user_id": "user-1", "user_role": "user"}},
     )
+    assert "Permission denied" in res_user
+
+    # Unknown document -> friendly message
+    res_missing = tools.delete_document.invoke(
+        {"document_id": "does-not-exist"},
+        config={"configurable": {"user_id": "admin-1", "user_role": "admin"}},
+    )
+    assert "No document found" in res_missing
+    engine.dispose()
