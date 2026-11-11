@@ -1,7 +1,11 @@
 import logging
 from pathlib import Path
 
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import (
+    Docx2txtLoader,
+    PyPDFLoader,
+    TextLoader,
+)
 from langchain_core.documents import Document as LCDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.orm import Session
@@ -27,6 +31,9 @@ def load_documents(doc: Document) -> list[LCDocument]:
         for p in pages:
             p.metadata["page"] = p.metadata.get("page", 0) + 1
         return pages
+
+    if ext == ".docx":
+        return Docx2txtLoader(doc.file_path).load()
 
     # .txt / .md
     return TextLoader(doc.file_path, encoding="utf-8").load()

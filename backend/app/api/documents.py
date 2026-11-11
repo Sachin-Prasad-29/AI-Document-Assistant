@@ -9,7 +9,13 @@ from app.auth import get_current_user, require_role
 from app.config import settings
 from app.db import crud
 from app.db.database import get_db
-from app.schemas import DocumentCreate, DocumentOut, UserOut, SummarizeRequest, SummarizeResponse
+from app.schemas import (
+    DocumentCreate,
+    DocumentOut,
+    UserOut,
+    SummarizeRequest,
+    SummarizeResponse,
+)
 from app.services import documents as documents_service
 from app.services.ingestion import ingest_document
 from app.services.summarizer import summarize_document
@@ -19,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 
 
 # ---------------------------------------------------------------------------

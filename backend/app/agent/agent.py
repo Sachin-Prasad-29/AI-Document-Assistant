@@ -25,7 +25,13 @@ def build_agent():
 
     return create_agent(
         model=ChatGoogleGenerativeAI(model=settings.llm_model),
-        tools=[list_documents, search_documents, get_document, summarize_document, delete_document],
+        tools=[
+            list_documents,
+            search_documents,
+            get_document,
+            summarize_document,
+            delete_document,
+        ],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=SqliteSaver(conn),
     )

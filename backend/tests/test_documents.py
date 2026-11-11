@@ -11,6 +11,31 @@ def upload_txt(client, name="notes.txt", data=b"hello world"):
     return client.post("/documents/upload", files={"file": (name, data, "text/plain")})
 
 
+def upload_docx(client, name="sample.docx", text="Hello docx document"):
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f"<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+        )
+        z.writestr("word/document.xml", xml)
+
+    return client.post(
+        "/documents/upload",
+        files={
+            "file": (
+                name,
+                buf.getvalue(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+
 def test_create_document(client):
     res = create_doc(client)
     assert res.status_code == 201
@@ -30,6 +55,16 @@ def test_upload_txt(client, tmp_path):
     assert body["filename"] == "notes.txt"
     # File is saved as uploads/{id}.txt
     assert (tmp_path / "uploads" / f"{body['id']}.txt").exists()
+
+
+def test_upload_docx(client, tmp_path):
+    res = upload_docx(client)
+    assert res.status_code == 201
+    body = res.json()
+    assert body["title"] == "sample"
+    assert body["filename"] == "sample.docx"
+    assert body["status"] == "ready"
+    assert (tmp_path / "uploads" / f"{body['id']}.docx").exists()
 
 
 def test_upload_unsupported_type(client):
