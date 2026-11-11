@@ -1,0 +1,98 @@
+AI Document Assistant
+Difficulty: ⭐⭐
+This should be your first project.
+
+Not just:
+Upload PDF → ask question → get answer.
+
+Instead:
+Upload documents and give an AI agent several tools to answer questions, retrieve information, summarize documents, and perform actions.
+
+Example
+Suppose you upload:
+company_policy.pdf
+employee_handbook.pdf
+leave_policy.pdf
+
+Then your API exposes:
+POST /documents
+POST /documents/upload
+GET  /documents
+GET  /documents/{id}
+DELETE /documents/{id}
+
+POST /chat
+POST /documents/{id}/summarize
+
+And the agent has tools:
+search_documents()
+get_document()
+summarize_document()
+list_documents()
+
+The LLM decides which tool to call.
+
+For example:
+User:
+How many casual leaves can an employee take?
+
+             │
+             ▼
+          Agent
+             │
+             ▼
+      search_documents()
+             │
+             ▼
+        Vector DB
+             │
+             ▼
+        Relevant chunks
+             │
+             ▼
+          Agent
+             │
+             ▼
+          Answer
+
+Add Human-in-the-loop
+Don't make HITL artificial.
+
+Give the agent an action that actually requires approval.
+
+For example:
+User:
+Delete the old leave-policy document.
+
+Agent:
+I found leave_policy_2025.pdf.
+
+This document will be permanently deleted.
+
+Approve deletion?
+
+Then your FastAPI endpoint can resume the workflow after approval.
+
+That gives you real experience with:
+LangGraph
+    ↓
+interrupt()
+    ↓
+Human approval
+    ↓
+resume
+
+What you'll practice
+- Document loaders
+- Chunking
+- Embeddings
+- Vector DB
+- Retriever
+- RAG
+- create_agent
+- Tools
+- LangGraph state
+- Human-in-the-loop
+- FastAPI
+- SQLite CRUD
+This alone is a very good mini project.
